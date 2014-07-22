@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OpenJSCAD</title>
+<link rel="stylesheet" href="//maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap.min.css">
+<link rel="stylesheet" href="//maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap-theme.min.css">
+<!-- HTML5 Shim and Respond.js IE8 support of HTML5 elements and media queries -->
+<!-- WARNING: Respond.js doesn't work if you view the page via file:// -->
+<!--[if lt IE 9]>
+      <script src="//oss.maxcdn.com/html5shiv/3.7.2/html5shiv.min.js"></script>
+      <script src="//oss.maxcdn.com/respond/1.4.2/respond.min.js"></script>
+    <![endif]-->
+<style type="text/css">
+html {
+	height: 100%;
+}
+
+body {
+	padding-top: 70px;
+	height: 100%;
+}
+
+.container {
+	width: 100%;
+	height: 100%;
+}
+
+#draw_area {
+	width: 100%;
+	height: 100%;
+}
+
+#canvas_area {
+	z-index: -1;
+	width: 100%;
+	height: 100%;
+}
+
+#editor {
+	z-index: 100;
+    height: 2000px;
+	background: rgba(200, 200, 200, 0.6) !important;
+}
+
+.ace-chrome .ace_gutter {
+	border-left: none;
+	background: rgba(200, 200, 200, 0.6) !important;
+}
+
+.ace-chrome {
+	font-size: 10pt !important;
+}
+</style>
+
+<script id="shader-fs" type="x-shader/x-fragment">
+  precision highp int;
+  precision highp float;
+
+  const vec3 lightDir = vec3(0.577350269, 0.577350269, -0.577350269);
+  varying vec3 vPosition;
+  uniform vec3 cameraPos;
+  uniform vec3 sphere1Center;
+  uniform vec3 sphere2Center;
+  uniform vec3 sphere3Center;
+
+    bool intersectSphere(vec3 center, vec3 lStart, vec3 lDir, out float dist)
+    {
+		vec3 c;
+        vec3 s;
+		float b;
+		float l;
+		float d;
+		bool ret;
+
+		ret  = false;
+        c = lStart - center;
+        s = normalize (lDir);
+        b = dot(s, c);
+        d = (b*b);
+        l = length(c);
+        d -= (l*l);
+        d += 1.0; // radius of 1.0
+        if (d >= 0.0)
+        {
+            dist = -b - sqrt(d);
+            if (dist > 0.0)
+                ret = true;
+		}
+        if (!ret)
+            dist = 10000.0;
+        return (ret);
+    }
+
+  vec3 lightAt(vec3 N, vec3 V, vec3 color) {
+    vec3 L = lightDir;
+    vec3 R = reflect(-L, N);
+
+    float c = 0.3 + 0.4 * pow(max(dot(R, V), 0.0), 30.0) + 0.7 * dot(L, N);
+
+    if (c > 1.0) {
+      return mix(color, vec3(1.6, 1.6, 1.6), c - 1.0);
+    }
+
+    return c * color;
+  }
+
+  bool intersectWorld(vec3 lStart, vec3 lDir, out vec3 pos,
+                      out vec3 normal, out vec3 color) {
+    float d1, d2, d3;
+    bool h1, h2, h3;
+
+    h1 = intersectSphere(sphere1Center, lStart, lDir, d1);
+    h2 = intersectSphere(sphere2Center, lStart, lDir, d2);
+    h3 = intersectSphere(sphere3Center, lStart, lDir, d3);
+
+    if (h1 && d1 < d2 && d1 < d3) {
+      pos = lStart + d1 * lDir;
+      normal = pos - sphere1Center;
+      color = vec3(0.0, 0.0, 0.9);
+    }
+    else if (h2 && d2 < d3) {
+      pos = lStart + d2 * lDir;
+      normal = pos - sphere2Center;
+      color = vec3(0.9, 0.0, 0.0);
+    }
+    else if (h3) {
+      pos = lStart + d3 * lDir;
+      normal = pos - sphere3Center;
+      color = vec3(0.0, 0.9, 0.0);
+    }
+    else if (lDir.y < -0.01) {
+      pos = lStart + ((lStart.y + 2.7) / -lDir.y) * lDir;
+      if (pos.x*pos.x + pos.z*pos.z > 30.0) {
+        return false;
+      }
+      normal = vec3(0.0, 1.0, 0.0);
+      if (fract(pos.x / 5.0) > 0.5 == fract(pos.z / 5.0) > 0.5) {
+        color = vec3(1.0);
+      }
+      else {
+        color = vec3(0.0);
+      }
+    }
+    else {
+     return false;
+    }
+
+    return true;
+  }
+
+  void main(void)
+  {
+    vec3 cameraDir = normalize(vPosition - cameraPos);
+
+    vec3 p1, norm, p2;
+    vec3 col, colT, colM, col3;
+    if (intersectWorld(cameraPos, cameraDir, p1,
+                       norm, colT)) {
+      col = lightAt(norm, -cameraDir, colT);
+      colM = (colT + vec3(0.7)) / 1.7;
+      cameraDir = reflect(cameraDir, norm);
+      if (intersectWorld(p1, cameraDir, p2, norm, colT)) {
+        col += lightAt(norm, -cameraDir, colT) * colM;
+        colM *= (colT + vec3(0.7)) / 1.7;
+        cameraDir = reflect(cameraDir, norm);
+        if (intersectWorld(p2, cameraDir, p1, norm, colT)) {
+          col += lightAt(norm, -cameraDir, colT) * colM;
+        }
+      }
+      gl_FragColor = vec4(col, 1.0);
+
+    }
+    else {
+      gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+    }
+  }
+</script>
+
+<script id="shader-vs" type="x-shader/x-vertex">
+  attribute vec2 aVertexPosition;
+  attribute vec3 aPlotPosition;
+
+  varying vec3 vPosition;
+
+  void main(void)
+  {
+    gl_Position = vec4(aVertexPosition, 1.0, 1.0);
+    vPosition = aPlotPosition;
+ }
+</script>
+
+
+<script type="application/x-javascript">
+    
+    
+
+  var gl;
+
+    function initGL (canvas)
+    {
+	    try
+	    {
+	        // on mobile platforms you must ask for experimental-webgl first
+	        gl = canvas.getContext ("experimental-webgl");
+	    }
+	    catch(e)
+	    {
+	        try
+	        {
+	            gl = canvas.getContext ("webgl");
+	        }
+	        catch (e)
+	        {
+	            
+	        }
+	    }
+	    if (!gl)
+	        alert ("Failed to initialise WebGL");
+	    else
+	        gl.viewport(0, 0, canvas.width, canvas.height);
+    }
+
+  function getShader(gl, id)
+  {
+      var shaderScript = document.getElementById(id);
+      if (!shaderScript)
+          return null;
+
+      var shader;
+      if (shaderScript.type == "x-shader/x-fragment")
+      {
+          shader = gl.createShader(gl.FRAGMENT_SHADER);
+      }
+      else if (shaderScript.type == "x-shader/x-vertex")
+      {
+          shader = gl.createShader(gl.VERTEX_SHADER);
+      }
+      else
+      {
+          return null;
+      }
+
+      gl.shaderSource(shader, shaderScript.textContent);
+      gl.compileShader(shader);
+
+      if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS))
+      {
+          alert(gl.getShaderInfoLog(shader));
+          return null;
+      }
+
+      return shader;
+  }
+
+  var shaderProgram;
+  var aVertexPosition;
+  var aPlotPosition;
+  var cameraPos;
+  var sphere1Center;
+  var sphere2Center;
+  var sphere3Center;
+
+  function initShaders()
+  {
+    var fragmentShader = getShader(gl, "shader-fs");
+    var vertexShader = getShader(gl, "shader-vs");
+
+    shaderProgram = gl.createProgram();
+    gl.attachShader(shaderProgram, vertexShader);
+    gl.attachShader(shaderProgram, fragmentShader);
+    gl.linkProgram(shaderProgram);
+
+    if (!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS))
+    {
+      alert("Could not initialise shaders");
+    }
+
+    gl.useProgram(shaderProgram);
+
+    aVertexPosition = gl.getAttribLocation(shaderProgram, "aVertexPosition");
+    gl.enableVertexAttribArray(aVertexPosition);
+
+    aPlotPosition = gl.getAttribLocation(shaderProgram, "aPlotPosition");
+    gl.enableVertexAttribArray(aPlotPosition);
+
+    cameraPos = gl.getUniformLocation(shaderProgram, "cameraPos");
+    sphere1Center = gl.getUniformLocation(shaderProgram, "sphere1Center");
+    sphere2Center = gl.getUniformLocation(shaderProgram, "sphere2Center");
+    sphere3Center = gl.getUniformLocation(shaderProgram, "sphere3Center");
+  }
+
+
+  function initBuffers()
+  {
+    vertexPositionBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, vertexPositionBuffer);
+    var vertices = [
+         1.0,  1.0,
+        -1.0,  1.0,
+         1.0, -1.0,
+        -1.0, -1.0,
+    ];
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+    gl.bindBuffer(gl.ARRAY_BUFFER, vertexPositionBuffer);
+    gl.vertexAttribPointer(aVertexPosition, 2, gl.FLOAT, false, 0, 0);
+
+
+    var plotPositionBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, plotPositionBuffer);
+    gl.vertexAttribPointer(aPlotPosition, 3, gl.FLOAT, false, 0, 0);
+  }
+
+  function crossProd(v1, v2) {
+    return { x: v1.y*v2.z - v2.y*v1.z,
+             y: v1.z*v2.x - v2.z*v1.x,
+             z: v1.x*v2.y - v2.x*v1.y };
+  }
+
+  function normalize(v) {
+    l = Math.sqrt(v.x*v.x + v.y*v.y + v.z*v.z);
+    return { x: v.x/l, y: v.y/l, z: v.z/l };
+  }
+
+  function vectAdd(v1, v2) {
+    return { x: v1.x + v2.x, y: v1.y + v2.y, z: v1.z + v2.z };
+  }
+
+  function vectSub(v1, v2) {
+    return { x: v1.x - v2.x, y: v1.y - v2.y, z: v1.z - v2.z };
+  }
+
+  function vectMul(v, l) {
+    return { x: v.x*l, y: v.y*l, z: v.z*l };
+  }
+
+  function pushVec(v, arr) {
+    arr.push(v.x, v.y, v.z);
+  }
+
+  t = 0;
+  function drawScene()
+  {
+    x1 = Math.sin(t * 1.1) * 1.5;
+    y1 = Math.cos(t * 1.3) * 1.5;
+    z1 = Math.sin(t + Math.PI/3) * 1.5;
+    x2 = Math.cos(t * 1.2) * 1.5;
+    y2 = Math.sin(t * 1.4) * 1.5;
+    z2 = Math.sin(t*1.25 - Math.PI/3) * 1.5;
+    x3 = Math.cos(t * 1.15) * 1.5;
+    y3 = Math.sin(t * 1.37) * 1.5;
+    z3 = Math.sin(t*1.27) * 1.5;
+
+    cameraFrom = { x: Math.sin(t * 0.4) * 18,
+                   y: Math.sin(t * 0.13) * 5 + 5,
+                   z: Math.cos(t * 0.4) * 18 };
+    cameraTo = { x:0, y:0, z:0 };
+    cameraPersp = 6;
+    up = { x: 0, y: 1, z: 0 };
+    cameraDir = normalize(vectSub(cameraTo, cameraFrom));
+
+    cameraLeft = normalize(crossProd(cameraDir, up));
+    cameraUp = normalize(crossProd(cameraLeft, cameraDir));
+    // cameraFrom + cameraDir * cameraPersp
+    cameraCenter = vectAdd(cameraFrom, vectMul(cameraDir, cameraPersp));
+    // cameraCenter + cameraUp + cameraLeft * ratio
+    cameraTopLeft  = vectAdd(vectAdd(cameraCenter, cameraUp),
+                             vectMul(cameraLeft, ratio));
+    cameraBotLeft  = vectAdd(vectSub(cameraCenter, cameraUp),
+                             vectMul(cameraLeft, ratio));
+    cameraTopRight = vectSub(vectAdd(cameraCenter, cameraUp),
+                             vectMul(cameraLeft, ratio));
+    cameraBotRight = vectSub(vectSub(cameraCenter, cameraUp),
+                             vectMul(cameraLeft, ratio));
+
+
+    //corners = [1.2, 1, -12, -1.2, 1, -12, 1.2, -1, -12, -1.2, -1, -12];
+    corners = [];
+    pushVec(cameraTopRight, corners);
+    pushVec(cameraTopLeft, corners);
+    pushVec(cameraBotRight, corners);
+    pushVec(cameraBotLeft, corners);
+
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(corners), gl.STATIC_DRAW);
+
+    gl.uniform3f(cameraPos, cameraFrom.x, cameraFrom.y, cameraFrom.z);
+    gl.uniform3f(sphere1Center, x1, y1, z1);
+    gl.uniform3f(sphere2Center, x2, y2, z2);
+    gl.uniform3f(sphere3Center, x3, y3, z3);
+
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+    t += 0.03;
+    if (t > Math.PI * 200) {
+      t -= Math.PI * 200;
+    }
+  }
+
+    var timer = 0;
+    var canvas;
+    function webGLStart()
+    {
+        canvas = document.getElementById("canvas");
+        initGL(canvas);
+        initShaders()
+        gl.clearColor(0.0, 0.0, 0.0, 1.0);
+        gl.clearDepth(1.0);
+        initBuffers();
+    }
+
+    function flipAnim ()
+    {
+        if (timer)
+        {
+            clearInterval(timer);
+            timer = 0;
+        }
+        else
+            timer = setInterval(drawScene, 15);
+    }
+
+    var ratio;
+    function resizeCanvas (w)
+    {
+        if (w == -1)
+        {
+            canvas.style.display = "none";
+            var main = document.getElementById ("main_area");
+            w = main.offsetWidth - 30; // for half a gutter either side
+            ratio = w / (main.offsetHeight - 30); // for half a gutter top and bottom
+            canvas.style.display = "";
+        }
+        else
+        {
+            ratio = 1.6;
+            canvas.parentNode.style.position = "";
+            canvas.parentNode.style.top = "";
+            window.onresize = null;
+        }
+        canvas.width = w;
+        canvas.height = w / ratio;
+        gl.viewport(0, 0, canvas.width, canvas.height);
+        t -= 0.03;
+        drawScene();
+    }
+
+    var resizeTimer = false;
+    function fullScreen() {
+        window.onresize = function() {
+          if (resizeTimer)
+            clearTimeout(resizeTimer);
+          resizeTimer = setTimeout(fullScreen, 100);
+        };
+        
+        resizeCanvas(-1);
+    }
+
+    function initialize_editor ()
+    {
+        var editor = ace.edit("editor");
+        editor.setTheme("ace/theme/chrome");
+        editor.getSession().setMode("ace/mode/javascript");
+        editor.setBehavioursEnabled(false);
+        editor.getSession().setUseSoftTabs(true);
+        editor.getSession().setTabSize(4);
+        editor.setShowInvisibles(true); 
+    }
+
+    function initialize ()
+    {
+        webGLStart();
+        fullScreen();
+        //flipAnim();
+        initialize_editor ();
+    }
+
+
+</script>
+</head>
+<body onload="initialize()">
+    <!-- Fixed navbar -->
+    <div class="navbar navbar-default navbar-fixed-top" role="navigation">
+        <div class="container">
+            <div class="navbar-header">
+                <button type="button" class="navbar-toggle" data-toggle="collapse" data-target=".navbar-collapse">
+                    <span class="sr-only">Toggle navigation</span> <span class="icon-bar"></span> <span class="icon-bar"></span> <span
+                        class="icon-bar"></span>
+                </button>
+                <a class="navbar-brand" href="#">OpenJSCAD</a>
+            </div>
+            <div class="navbar-collapse collapse">
+                <ul class="nav navbar-nav">
+                    <li class="active"><a href="#">Home</a></li>
+                    <li><a href="#about">About</a></li>
+                    <li><a href="#contact">Contact</a></li>
+                    <li class="dropdown"><a href="#" class="dropdown-toggle" data-toggle="dropdown">View <span
+                            class="caret"></span></a>
+                        <ul class="dropdown-menu" role="menu">
+                            <li class="dropdown-header">Animation</li>
+                            <li><a href="#" onclick="flipAnim()">Start/Stop</a></li>
+                            <li class="divider"></li>
+                            <li class="dropdown-header">Viewport</li>
+                            <li><a href="#" onclick="resizeCanvas(400)">Small</a></li>
+                            <li><a href="#" onclick="resizeCanvas(600)">Large</a></li>
+                            <li><a href="#" onclick="fullScreen();">Full screen</a></li>
+                        </ul></li>
+                </ul>
+                <ul class="nav navbar-nav navbar-right">
+                    <li><a href="#">Code</a></li>
+                    <li class="active"><a href="./">View</a></li>
+                </ul>
+            </div>
+            <!--/.nav-collapse -->
+        </div>
+    </div>
+
+    <div id="main_area" class="container">
+        <div class="row">
+            <div class="col-md-8">
+        <div id="draw_area">
+            <div id="canvas_area">
+                <canvas id="canvas"></canvas>
+            </div>
+        </div>
+                    </div>
+            <div class="col-md-4" id="editor">
+function foo (items)
+{
+    var x = "All this is syntax highlighted";
+    return x;
+}
+</div>
+        </div>
+
+    </div>
+    <script src="//ajax.googleapis.com/ajax/libs/jquery/1.11.1/jquery.min.js"></script>
+    <script src="//maxcdn.bootstrapcdn.com/bootstrap/3.2.0/js/bootstrap.min.js"></script>
+    <script src="//cdnjs.cloudflare.com/ajax/libs/ace/1.1.3/ace.js"></script>
+</body>
+</html>
