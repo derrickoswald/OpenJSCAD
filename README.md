@@ -13,3 +13,5 @@ in order to gain mobile portability and other UI benefits.
 Trying to learn:
 * about WebGL and shaders 
 * more about less, css, bootstrap, and mobile
+
+For the current demo see [http://derrickoswald.github.io/OpenJSCAD/](http://derrickoswald.github.io/OpenJSCAD/).
