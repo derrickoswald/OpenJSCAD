@@ -1,0 +1,83 @@
+html,
+body
+{
+    height: 100%;
+}
+
+
+footer.page-footer
+{
+    margin-top: 0;
+}
+
+#canvas
+{
+	z-index: -1;
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 61px;
+    bottom: 0;
+    width: 100%;
+    height: calc(100% - 61px);
+}
+
+.fullpage
+{
+    height: calc(100% - 61px);
+}
+
+#editor
+{
+    z-index: 100;
+    position: absolute;
+    right: 0;
+    top: 61px;
+    bottom: 0;
+    background: rgba(200, 200, 200, 0.6) !important;
+    height: calc(100% - 61px);
+}
+
+.ace-chrome .ace_gutter {
+    border-left: none;
+    background: rgba(200, 200, 200, 0.6) !important;
+}
+
+.ace-chrome {
+    font-size: 10pt !important;
+}
+
+.btn-file
+{
+    position: relative;
+    overflow: hidden;
+    color: white;
+    background-color: #2bbbad;
+}
+
+.btn-file:hover, .btn-file:focus
+{
+    color: white;
+}
+
+.btn-file input[type=file]
+{
+    position: absolute;
+    top: 0;
+    right: 0;
+    min-width: 100%;
+    min-height: 100%;
+    font-size: 100px;
+    text-align: right;
+    filter: alpha(opacity=0);
+    opacity: 0;
+    outline: none;
+    background: white;
+    cursor: inherit;
+    display: block;
+}
+
+.drop_zone
+{
+    color: graytext;
+}
