@@ -1,6 +1,6 @@
 requirejs
 (
-    [],
+    ["es6-promise"],
     /**
      * @summary Main entry point for the application.
      * @description Performs application initialization as the first step in the RequireJS load sequence.
@@ -9,11 +9,14 @@ requirejs
      * @exports openjscad
      * @version 1.0
      */
-    function ()
+    function (es6_promise)
     {
         var CANVAS = "canvas"; // the element id of the canvas
         var EDITOR = "editor"; // the element id of the editor
         var gl = null;
+
+        // using Promise: backwards compatibility for older browsers
+        es6_promise.polyfill ();
 
         function initGL ()
         {
@@ -41,32 +44,92 @@ requirejs
                 }
         }
 
-        function getShader (gl, id)
+        function isOK (xhr)
         {
-            var script;
+            var file;
             var ret;
 
-            ret = null;
+            file = 0 == xhr.responseURL.indexOf ("file:");
+            ret = !!xhr.response;
+            if (!file)
+                ret = ret && ((xhr.status >= 200) && (xhr.status < 300));
 
-            script = document.getElementById (id);
-            if (script)
+            return (ret);
+        };
+        function get (url)
+        {
+            function promise (resolve, reject)
             {
-                if (script.type == "x-shader/x-fragment")
-                    ret = gl.createShader (gl.FRAGMENT_SHADER);
-                else if (script.type == "x-shader/x-vertex")
-                    ret = gl.createShader (gl.VERTEX_SHADER);
-                if (ret)
-                {
-                    gl.shaderSource (ret, script.textContent);
-                    gl.compileShader (ret);
+                var req = new XMLHttpRequest ();
+                req.open ("GET", url);
 
-                    if (!gl.getShaderParameter (ret, gl.COMPILE_STATUS))
-                    {
-                        alert (gl.getShaderInfoLog (ret));
-                        ret = null;
-                    }
+                req.onload = function ()
+                {
+                    if (isOK (req))
+                       resolve (req.response);
+                    else
+                      reject (Error (req.statusText));
+                };
+
+                req.onerror = function ()
+                {
+                    reject (Error ("network error"));
+                };
+
+                req.send();
+            }
+
+            return (new Promise (promise));
+        }
+
+        function compileShader (gl, type, text)
+        {
+            var ret;
+
+            ret = gl.createShader (type);
+            if (ret)
+            {
+                gl.shaderSource (ret, text);
+                gl.compileShader (ret);
+
+                if (!gl.getShaderParameter (ret, gl.COMPILE_STATUS))
+                {
+                    alert (gl.getShaderInfoLog (ret));
+                    ret = null;
                 }
             }
+
+            return (ret);
+        }
+
+        function getShaders (gl, files)
+        {
+            var ret;
+
+            function fetcher (url)
+            {
+                var type;
+                var ret;
+
+                if (-1 != url.indexOf ("fragment.glsl"))
+                    type = gl.FRAGMENT_SHADER;
+                else if (-1 != url.indexOf ("vertex.glsl"))
+                    type = gl.VERTEX_SHADER;
+                else
+                    throw ("unknown shader type: " + url);
+
+                ret = get (url).then
+                (
+                    function (text)
+                    {
+                        return (compileShader (gl, type, text));
+                    }
+                );
+
+                return (ret);
+            }
+
+            ret = files.map (fetcher);
 
             return (ret);
         }
@@ -78,34 +141,49 @@ requirejs
         var sphere2Center;
         var sphere3Center;
 
-        function initShaders ()
+        function initProgram ()
         {
-            var fragmentShader;
-            var vertexShader;
-            var shaderProgram;
+            var code = ["shaders/default.fragment.glsl", "shaders/default.vertex.glsl"];
+            var all;
+            var ret;
 
-            fragmentShader = getShader (gl, "shader-fs");
-            vertexShader = getShader (gl, "shader-vs");
-            shaderProgram = gl.createProgram ();
-            gl.attachShader (shaderProgram, vertexShader);
-            gl.attachShader (shaderProgram, fragmentShader);
-            gl.linkProgram (shaderProgram);
+            all = Promise.all (getShaders (gl, code));
+            ret = all.then
+            (
+                function (shaders)
+                {
+                    var shaderProgram;
 
-            if (!gl.getProgramParameter (shaderProgram, gl.LINK_STATUS))
-                alert ("Could not link shader program");
+                    shaderProgram = gl.createProgram ();
+                    shaders.map
+                    (
+                        function (shader)
+                        {
+                            gl.attachShader (shaderProgram, shader);
+                        }
+                    );
 
-            gl.useProgram (shaderProgram);
+                    gl.linkProgram (shaderProgram);
 
-            aVertexPosition = gl.getAttribLocation (shaderProgram, "aVertexPosition");
-            gl.enableVertexAttribArray (aVertexPosition);
+                    if (!gl.getProgramParameter (shaderProgram, gl.LINK_STATUS))
+                        alert ("Could not link shader program");
 
-            aPlotPosition = gl.getAttribLocation (shaderProgram, "aPlotPosition");
-            gl.enableVertexAttribArray (aPlotPosition);
+                    gl.useProgram (shaderProgram);
 
-            cameraPos = gl.getUniformLocation (shaderProgram, "cameraPos");
-            sphere1Center = gl.getUniformLocation (shaderProgram, "sphere1Center");
-            sphere2Center = gl.getUniformLocation (shaderProgram, "sphere2Center");
-            sphere3Center = gl.getUniformLocation (shaderProgram, "sphere3Center");
+                    aVertexPosition = gl.getAttribLocation (shaderProgram, "aVertexPosition");
+                    gl.enableVertexAttribArray (aVertexPosition);
+
+                    aPlotPosition = gl.getAttribLocation (shaderProgram, "aPlotPosition");
+                    gl.enableVertexAttribArray (aPlotPosition);
+
+                    cameraPos = gl.getUniformLocation (shaderProgram, "cameraPos");
+                    sphere1Center = gl.getUniformLocation (shaderProgram, "sphere1Center");
+                    sphere2Center = gl.getUniformLocation (shaderProgram, "sphere2Center");
+                    sphere3Center = gl.getUniformLocation (shaderProgram, "sphere3Center");
+                }
+            );
+
+            return (ret);
         }
 
         function initBuffers ()
@@ -280,12 +358,16 @@ requirejs
         {
             initGL ();
             if (null != gl)
-            {
-                initShaders ();
-                gl.clearColor (0.0, 0.0, 0.0, 1.0);
-                gl.clearDepth (1.0);
-                initBuffers ();
-            }
+                initProgram ().then
+                (
+                    function ()
+                    {
+                        gl.clearColor (0.0, 0.0, 0.0, 1.0);
+                        gl.clearDepth (1.0);
+                        initBuffers ();
+                        fillScreen ();
+                    }
+                );
         }
 
         function initialize_editor ()
@@ -358,7 +440,6 @@ requirejs
             resizeTimer = setInterval (countDown, 1, this, downCount);
             webGLStart ();
             initialize_editor ();
-            fillScreen ();
         }
 
         initialize (); //  onload="initialize()"

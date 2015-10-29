@@ -1,6 +1,3 @@
-define(function(require, exports, module) {
-    //Put traditional CommonJS module content here
-
 /*!
  * @overview es6-promise - a tiny implementation of Promises/A+.
  * @copyright Copyright (c) 2014 Yehuda Katz, Tom Dale, Stefan Penner and contributors (Conversion to ES6 API by Jake Archibald)
@@ -967,5 +964,3 @@ define(function(require, exports, module) {
 
     lib$es6$promise$polyfill$$default();
 }).call(this);
-
-});
