@@ -66,9 +66,9 @@ requirejs
                 req.onload = function ()
                 {
                     if (isOK (req))
-                       resolve (req.response);
+                        resolve (req.response);
                     else
-                      reject (Error (req.statusText));
+                        reject (Error (req.statusText));
                 };
 
                 req.onerror = function ()
@@ -196,7 +196,7 @@ requirejs
             vertexPositionBuffer = gl.createBuffer ();
             gl.bindBuffer (gl.ARRAY_BUFFER, vertexPositionBuffer);
             gl.bufferData (gl.ARRAY_BUFFER, new Float32Array (vertices), gl.STATIC_DRAW);
-            gl.bindBuffer (gl.ARRAY_BUFFER, vertexPositionBuffer);
+            //gl.bindBuffer (gl.ARRAY_BUFFER, vertexPositionBuffer);
             gl.vertexAttribPointer (aVertexPosition, 2, gl.FLOAT, false, 0, 0);
             plotPositionBuffer = gl.createBuffer ();
             gl.bindBuffer (gl.ARRAY_BUFFER, plotPositionBuffer);

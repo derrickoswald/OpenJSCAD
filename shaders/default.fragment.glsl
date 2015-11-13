@@ -17,6 +17,7 @@
         bool ret;
 
         ret  = false;
+
         c = lStart - center;
         s = normalize (lDir);
         b = dot(s, c);
@@ -30,12 +31,13 @@
             if (dist > 0.0)
                 ret = true;
         }
-        if (!ret)
+        else
             dist = 10000.0;
+
         return (ret);
     }
 
-    vec3 lightAt(vec3 N, vec3 V, vec3 color)
+    vec3 lightAt (vec3 N, vec3 V, vec3 color)
     {
         vec3 L = lightDir;
         vec3 R = reflect(-L, N);
@@ -48,74 +50,84 @@
         return c * color;
     }
 
-    bool intersectWorld(vec3 lStart, vec3 lDir, out vec3 pos,
-                      out vec3 normal, out vec3 color)
+    bool intersectWorld (vec3 lStart, vec3 lDir, out vec3 pos, out vec3 normal, out vec3 color)
     {
         float d1, d2, d3;
         bool h1, h2, h3;
+        bool ret;
+        
+        ret = false;
     
         h1 = intersectSphere(sphere1Center, lStart, lDir, d1);
         h2 = intersectSphere(sphere2Center, lStart, lDir, d2);
         h3 = intersectSphere(sphere3Center, lStart, lDir, d3);
     
-        if (h1 && d1 < d2 && d1 < d3) {
-          pos = lStart + d1 * lDir;
-          normal = pos - sphere1Center;
-          color = vec3(0.0, 0.0, 0.9);
+        if (h1 && d1 < d2 && d1 < d3)
+        {
+            pos = lStart + d1 * lDir;
+            normal = pos - sphere1Center;
+            color = vec3(0.0, 0.0, 0.9);
+            ret = true;
         }
-        else if (h2 && d2 < d3) {
-          pos = lStart + d2 * lDir;
-          normal = pos - sphere2Center;
-          color = vec3(0.9, 0.0, 0.0);
+        else if (h2 && d2 < d3)
+        {
+            pos = lStart + d2 * lDir;
+            normal = pos - sphere2Center;
+            color = vec3(0.9, 0.0, 0.0);
+            ret = true;
         }
-        else if (h3) {
-          pos = lStart + d3 * lDir;
-          normal = pos - sphere3Center;
-          color = vec3(0.0, 0.9, 0.0);
+        else if (h3)
+        {
+            pos = lStart + d3 * lDir;
+            normal = pos - sphere3Center;
+            color = vec3(0.0, 0.9, 0.0);
+            ret = true;
         }
-        else if (lDir.y < -0.01) {
-          pos = lStart + ((lStart.y + 2.7) / -lDir.y) * lDir;
-          if (pos.x*pos.x + pos.z*pos.z > 30.0) {
-            return false;
-          }
-          normal = vec3(0.0, 1.0, 0.0);
-          if (fract(pos.x / 5.0) > 0.5 == fract(pos.z / 5.0) > 0.5) {
-            color = vec3(1.0);
-          }
-          else {
-            color = vec3(0.0);
-          }
-        }
-        else {
-         return false;
+        else if (lDir.y < -0.01)
+        {
+            pos = lStart + ((lStart.y + 2.7) / -lDir.y) * lDir;
+            if (pos.x*pos.x + pos.z*pos.z <= 40.0)
+            {
+                normal = vec3(0.0, 1.0, 0.0);
+                if (fract(pos.x / 2.0) > 0.5 == fract(pos.z / 2.0) > 0.5)
+                    color = vec3 (1.0);
+                else
+                    color = vec3 (0.0);
+                ret = true;
+            }
         }
     
-        return true;
+        return (ret);
     }
 
-  void main(void)
-  {
-    vec3 cameraDir = normalize(vPosition - cameraPos);
+    void main (void)
+    {
+        vec3 p1;
+        vec3 norm;
+        vec3 p2;
+        vec3 col;
+        vec3 colT;
+        vec3 colM;
+        vec3 col3;
+        vec3 cameraDir;
 
-    vec3 p1, norm, p2;
-    vec3 col, colT, colM, col3;
-    if (intersectWorld(cameraPos, cameraDir, p1,
-                       norm, colT)) {
-      col = lightAt(norm, -cameraDir, colT);
-      colM = (colT + vec3(0.7)) / 1.7;
-      cameraDir = reflect(cameraDir, norm);
-      if (intersectWorld(p1, cameraDir, p2, norm, colT)) {
-        col += lightAt(norm, -cameraDir, colT) * colM;
-        colM *= (colT + vec3(0.7)) / 1.7;
-        cameraDir = reflect(cameraDir, norm);
-        if (intersectWorld(p2, cameraDir, p1, norm, colT)) {
-          col += lightAt(norm, -cameraDir, colT) * colM;
+        cameraDir = normalize (vPosition - cameraPos);
+
+        if (intersectWorld (cameraPos, cameraDir, p1, norm, colT))
+        {
+            col = lightAt (norm, -cameraDir, colT);
+            colM = (colT + vec3 (0.7)) / 1.7;
+            cameraDir = reflect (cameraDir, norm);
+            if (intersectWorld (p1, cameraDir, p2, norm, colT))
+            {
+                col += lightAt (norm, -cameraDir, colT) * colM;
+                colM *= (colT + vec3 (0.7)) / 1.7;
+                cameraDir = reflect (cameraDir, norm);
+                if (intersectWorld (p2, cameraDir, p1, norm, colT))
+                    col += lightAt (norm, -cameraDir, colT) * colM;
+            }
+            gl_FragColor = vec4(col, 1.0);
         }
-      }
-      gl_FragColor = vec4(col, 1.0);
-
+        else
+            gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
     }
-    else {
-      gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
-    }
-  }
